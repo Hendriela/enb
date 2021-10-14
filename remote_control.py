@@ -30,52 +30,19 @@ try:
         char = screen.getch()
         if char == ord('x'):
             break
-        elif char == ord('w'):
-            # Send a character
-            ser.write(b'w0;')
-            time.sleep(0.05)
-            arduino.append(ser.readline())
-            arduino.append(ser.readline())
-        elif char == ord("s"):
-            # Send a character
-            ser.write(b's0;')
-            time.sleep(0.05)
-            arduino.append(ser.readline())
-            arduino.append(ser.readline())
-        elif char == ord("a"):
-            # Send a character
-            ser.write(b'a0;')
-            time.sleep(0.05)
-            arduino.append(ser.readline())
-            arduino.append(ser.readline())
-        elif char == ord("d"):
-            # Send a character
-            ser.write(b'd0;')
-            time.sleep(0.05)
-            arduino.append(ser.readline())
-            arduino.append(ser.readline())
-        elif char == ord("q"):
-            # Send a character
-            ser.write(b'q0;')
-            time.sleep(0.05)
-            arduino.append(ser.readline())
-            arduino.append(ser.readline())
-        elif char == ord("e"):
-            # Send a character
-            ser.write(b'e0;')
-            time.sleep(0.05)
-            arduino.append(ser.readline())
-            arduino.append(ser.readline())
         elif char == ord(' '):
             # Send a character
             ser.write(b't0;')
             time.sleep(0.05)
             arduino.append(ser.readline())
             arduino.append(ser.readline())
- #       else:
- #           # Send a character
- #           ser.write(b's')
- #           time.sleep(0.05)
+        else:
+            # Send any character
+            var_char = '{}0;'.format(chr(char))     # char is the unicode integer of the key, so we have to transform it back into the string character before formatting
+            ser.write(var_char.encode('utf-8'))     # Arduino expects a byte instead of a string, so encode it before sending it
+            time.sleep(0.05)
+            arduino.append(ser.readline())
+            arduino.append(ser.readline())
 finally:
     # shut down
     curses.nocbreak()
