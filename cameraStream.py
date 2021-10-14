@@ -11,6 +11,9 @@ from http import server
 import numpy as np
 import cv2
 
+### other imports
+from datetime import datetime
+
 PAGE = """\
 <html>
 <head>
@@ -23,6 +26,7 @@ PAGE = """\
 """
 
 det = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+bordersize = 10
 
 class StreamingOutput(object):
     def __init__(self):
@@ -86,7 +90,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                         rects = det.detectMultiScale(gray, 
                             scaleFactor=1.1, 
                             minNeighbors=5, 
-                            minSize=(100, 100), # adjust to your image size, maybe smaller, maybe larger?
+                            minSize=(150, 150), # adjust to your image size, maybe smaller, maybe larger?
                             flags=cv2.CASCADE_SCALE_IMAGE)
 
                         for (x, y, w, h) in rects:
@@ -95,8 +99,14 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                             # w: width of the rectangle 
                             # h: height of the rectangle
                             # Remember, order in images: [y, x, channel]
-                            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 10)
+                            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), bordersize)
 
+                        if datetime.now().second % 5 == 0:
+                            for (x,y,w,h) in rects:
+                                crop = frame[y+bordersize:y+h-bordersize, x+bordersize:x+w-bordersize]
+                                cropscale = cv2.resize(crop, (128,128))
+                                cv2.imwrite("../faces/face.png", cropscale)
+                                
 
                         ### and now we convert it back to JPEG to stream it
                         _, frame = cv2.imencode('.JPEG', frame)
