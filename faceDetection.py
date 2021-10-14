@@ -3,7 +3,9 @@ import numpy as np
 import cv2
 
 # Load test image
-im = cv2.imread("test.jpg")
+import os
+print(os.getcwd())
+im = cv2.imread("../photo_1.jpg")
 
 det = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 

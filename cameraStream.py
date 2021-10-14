@@ -22,6 +22,7 @@ PAGE = """\
 </html>
 """
 
+det = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 
 class StreamingOutput(object):
     def __init__(self):
@@ -74,9 +75,28 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                         frame = cv2.imdecode(np.frombuffer(frame, dtype=np.uint8),
                                              cv2.IMREAD_COLOR)
 
+                        if frame is None:
+                            print("!!!!!!!!!!!!!!!")
+
                         ###############
                         ## HERE CAN GO ALL IMAGE PROCESSING
                         ###############
+                        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    
+                        rects = det.detectMultiScale(gray, 
+                            scaleFactor=1.1, 
+                            minNeighbors=5, 
+                            minSize=(100, 100), # adjust to your image size, maybe smaller, maybe larger?
+                            flags=cv2.CASCADE_SCALE_IMAGE)
+
+                        for (x, y, w, h) in rects:
+                            # x: x location
+                            # y: y location
+                            # w: width of the rectangle 
+                            # h: height of the rectangle
+                            # Remember, order in images: [y, x, channel]
+                            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 10)
+
 
                         ### and now we convert it back to JPEG to stream it
                         _, frame = cv2.imencode('.JPEG', frame)
