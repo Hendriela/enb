@@ -1,5 +1,6 @@
 import io
 import picamera  # Camera
+import os
 
 #### THIS IS IMPORTANT FOR LIFE STREAMING ####
 import logging
@@ -48,7 +49,10 @@ class StreamingOutput(object):
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     frame_i = 0
-    face_i = 0
+
+    # Check the highest file name number to avoid overwriting
+    fnames = os.listdir("../faces")
+    face_i = np.max(np.array([int(f[5:8]) for f in fnames]))+1
     second = datetime.now()
 
     def do_GET(self):
@@ -92,7 +96,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                         rects = det.detectMultiScale(gray, 
                             scaleFactor=1.1, 
                             minNeighbors=8, 
-                            minSize=(200, 200), # adjust to your image size, maybe smaller, maybe larger?
+                            minSize=(170, 170), # adjust to your image size, maybe smaller, maybe larger?
                             flags=cv2.CASCADE_SCALE_IMAGE)
 
                         for (x, y, w, h) in rects:
@@ -106,12 +110,12 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                         current_second = datetime.now()
                         if (current_second - self.second).seconds >= 3:
                             for (x,y,w,h) in rects:
-                                if self.face_i > 99:
+                                if self.face_i > 999:
                                     break
                                 
                                 crop = frame[y+bordersize:y+h-bordersize, x+bordersize:x+w-bordersize]
                                 cropscale = cv2.resize(crop, (128,128))
-                                blurry = cv2.Laplacian(cropscale, cv2.CV_64F).var() < 250
+                                blurry = cv2.Laplacian(cropscale, cv2.CV_64F).var() < 180
                                 if not blurry:
                                     #print("BLURRY")
                                     #cv2.imwrite("../faces_blurry/face_%03i.png" % self.face_i, cropscale)
