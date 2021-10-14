@@ -37,8 +37,9 @@ try:
             arduino.append(ser.readline())
             arduino.append(ser.readline())
         else:
-            # Send a character
-            ser.write(b'{}0;'.format(char))
+            # Send any character
+            var_char = '{}0;'.format(chr(char))     # char is the unicode integer of the key, so we have to transform it back into the string character before formatting
+            ser.write(var_char.encode('utf-8'))     # Arduino expects a byte instead of a string, so encode it before sending it
             time.sleep(0.05)
             arduino.append(ser.readline())
             arduino.append(ser.readline())
