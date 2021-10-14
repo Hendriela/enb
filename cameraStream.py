@@ -48,6 +48,8 @@ class StreamingOutput(object):
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     frame_i = 0
+    face_i = 0
+    second = datetime.now()
 
     def do_GET(self):
         if self.path == '/':
@@ -101,13 +103,26 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                             # Remember, order in images: [y, x, channel]
                             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), bordersize)
 
-                        if datetime.now().second % 5 == 0:
+                        current_second = datetime.now()
+                        if (current_second - self.second).seconds >= 3:
                             for (x,y,w,h) in rects:
+                                if self.face_i > 99:
+                                    break
+                                
                                 crop = frame[y+bordersize:y+h-bordersize, x+bordersize:x+w-bordersize]
                                 cropscale = cv2.resize(crop, (128,128))
-                                cv2.imwrite("../faces/face.png", cropscale)
+                                blurry = cv2.Laplacian(cropscale, cv2.CV_64F).var() < 250
+                                if not blurry:
+                                    #print("BLURRY")
+                                    #cv2.imwrite("../faces_blurry/face_%03i.png" % self.face_i, cropscale)
+                                #else:
+                                    cv2.imwrite("../faces/face_%03i.png" % self.face_i, cropscale)
+                                    self.second = datetime.now()
+                                    self.face_i += 1
+                                    print("saved face %i" % (self.face_i-1))
                                 
 
+                        cv2.putText(frame, "%i" % (self.face_i-1), (100,100), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
                         ### and now we convert it back to JPEG to stream it
                         _, frame = cv2.imencode('.JPEG', frame)
 
@@ -134,6 +149,7 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
 # Open the camera and stream a low-res image (width 640, height 480 px)
 with picamera.PiCamera(resolution='640x480', framerate=24) as camera:
     camera.vflip = True  # Flips image vertically, depends on your camera mounting
+    camera.awb_mode= "auto"
     output = StreamingOutput()
     camera.start_recording(output, format='mjpeg')
     try:
