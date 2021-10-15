@@ -14,7 +14,7 @@ from pycoral.utils.edgetpu import make_interpreter
 _NUM_KEYPOINTS = 17
 
 # Open an image using OpenCV, change color space for Deep Neural Network
-img = cv2.imread('test.jpg')
+img = cv2.imread('test_pose.jpg')
 
 # This is where you specify the Deep Neural Network.
 # Please put it in the same folder as the python file.
@@ -48,4 +48,4 @@ for i in range(0, _NUM_KEYPOINTS):
                (255, 0, 0),  # color in RGB
                -1)  # fill the circle
 
-cv2.imwrite('test_pose.jpg', img)
+cv2.imwrite('test_pose_detect.jpg', img)

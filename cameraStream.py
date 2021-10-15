@@ -12,9 +12,14 @@ from http import server
 import numpy as np
 import cv2
 
+### Imports for pose detector
+from pycoral.adapters import common
+from pycoral.utils.edgetpu import make_interpreter
+
 ### other imports
 from datetime import datetime
 from datetime import timedelta
+from copy import deepcopy
 
 PAGE = """\
 <html>
@@ -30,8 +35,13 @@ PAGE = """\
 # Initialize face detector
 det = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 
-# Set border size of the face detection square as a constant
-BORDER = 10
+# Initialize pose detector
+interpreter = make_interpreter('coral/movenet_single_pose_thunder_ptq_edgetpu.tflite')
+interpreter.allocate_tensors()
+
+# Set constants
+BORDER = 10             # Border size [px] of detected faces on stream 
+_NUM_KEYPOINTS = 17     # Number of detection points for pose detection
 
 class StreamingOutput(object):
     def __init__(self):
@@ -94,6 +104,25 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                         ## HERE CAN GO ALL IMAGE PROCESSING
                         ###############
 
+                        ###############
+                        ## POSE DETECTION
+                        ###############
+
+                        # This resizes the RGB image
+                        resized_img = cv2.resize(frame, common.input_size(interpreter))
+                        # Send resized image to Coral
+                        common.set_input(interpreter, resized_img)
+
+                        # Do the job
+                        interpreter.invoke()
+
+                        # Get the pose
+                        pose = common.output_tensor(interpreter, 0).copy().reshape(_NUM_KEYPOINTS, 3)
+
+                        ###############
+                        ## FACE DETECTION
+                        ###############
+
                         # Convert frame into greyscale for image processing
                         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -106,17 +135,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                             minSize=(170, 170),     # Minimum size of a detected face, depends on face-camera distance
                             flags=cv2.CASCADE_SCALE_IMAGE)
 
-                        # Go through all detected faces in the frame and draw a rectangle around it
-                        for (x, y, w, h) in rects:
-                            # x: x location
-                            # y: y location
-                            # w: width of the rectangle 
-                            # h: height of the rectangle
-                            # Remember, order in images: [y, x, channel]
-                            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), BORDER)
-
-                        ### SAVING FACES ###
-
+                        ### Save detected faces
                         # Only start the saving process if the last face was saved more than 3 seconds ago
                         current_second = datetime.now()
                         if (current_second - self.second).seconds >= 3:
@@ -141,9 +160,35 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                                     self.second = datetime.now()   # Remember time of saving to avoid saving too quickly
                                     self.face_i += 1               # Increment face counter
                                     print("saved face %i" % (self.face_i-1))
-                                
+                        
+                        ##################################################
+                        ### DRAW DETECTIONS ON THE FRAME BEFORE STREAMING
+                        ##################################################
+
+                        ### DRAW RECTANGLE AROUND FACES
+                        # Go through all detected faces in the frame and draw a rectangle around it
+                        for (x, y, w, h) in rects:
+                            # x: x location
+                            # y: y location
+                            # w: width of the rectangle 
+                            # h: height of the rectangle
+                            # Remember, order in images: [y, x, channel]
+                            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), BORDER)
+
                         # Put face counter on top of the streamed frame
                         cv2.putText(frame, "%i" % (self.face_i-1), (100,100), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
+
+
+                        ### DRAW DOTS ON POSE KEYPOINTS
+                        height, width, ch = frame.shape
+
+                        # Draw the pose onto the image using blue dots
+                        for i in range(0, _NUM_KEYPOINTS):
+                            cv2.circle(frame,
+                                    [int(pose[i][1] * width), int(pose[i][0] * height)],
+                                    5,  # radius
+                                    (255, 0, 0),  # color in RGB
+                                    -1)  # fill the circle
 
                         ### and now we convert it back to JPEG to stream it
                         _, frame = cv2.imencode('.JPEG', frame)
