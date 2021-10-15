@@ -14,6 +14,7 @@ import cv2
 
 ### other imports
 from datetime import datetime
+from datetime import timedelta
 
 PAGE = """\
 <html>
@@ -26,8 +27,11 @@ PAGE = """\
 </html>
 """
 
+# Initialize face detector
 det = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
-bordersize = 10
+
+# Set border size of the face detection square as a constant
+BORDER = 10
 
 class StreamingOutput(object):
     def __init__(self):
@@ -49,11 +53,12 @@ class StreamingOutput(object):
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     frame_i = 0
+    # Initialize variable that stores time of last saved image (3 seconds ago to immediately start saving faces
+    second = datetime.now() - timedelta(seconds=3)
 
-    # Check the highest file name number to avoid overwriting
+    # Look up the currently highest file name number and use it as the first file number to avoid overwriting
     fnames = os.listdir("../faces")
     face_i = np.max(np.array([int(f[5:8]) for f in fnames]))+1
-    second = datetime.now()
 
     def do_GET(self):
         if self.path == '/':
@@ -85,48 +90,61 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                         frame = cv2.imdecode(np.frombuffer(frame, dtype=np.uint8),
                                              cv2.IMREAD_COLOR)
 
-                        if frame is None:
-                            print("!!!!!!!!!!!!!!!")
-
                         ###############
                         ## HERE CAN GO ALL IMAGE PROCESSING
                         ###############
+
+                        # Convert frame into greyscale for image processing
                         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    
+
+                        # Use face detector to find all faces in the current frame
+                        # Output rects will be a list of tuples with x/y coordinates of the top-left corner of the
+                        # detected face rectangle and the width and height of the rectangle
                         rects = det.detectMultiScale(gray, 
-                            scaleFactor=1.1, 
-                            minNeighbors=8, 
-                            minSize=(170, 170), # adjust to your image size, maybe smaller, maybe larger?
+                            scaleFactor=1.1,        # How much the image should be scaled down per processing layer
+                            minNeighbors=8,         # Detection threshold (higher -> more certain faces are detected)
+                            minSize=(170, 170),     # Minimum size of a detected face, depends on face-camera distance
                             flags=cv2.CASCADE_SCALE_IMAGE)
 
+                        # Go through all detected faces in the frame and draw a rectangle around it
                         for (x, y, w, h) in rects:
                             # x: x location
                             # y: y location
                             # w: width of the rectangle 
                             # h: height of the rectangle
                             # Remember, order in images: [y, x, channel]
-                            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), bordersize)
+                            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), BORDER)
 
+                        ### SAVING FACES ###
+
+                        # Only start the saving process if the last face was saved more than 3 seconds ago
                         current_second = datetime.now()
                         if (current_second - self.second).seconds >= 3:
+
                             for (x,y,w,h) in rects:
-                                if self.face_i > 999:
+                                if self.face_i > 999:       # Stop at 999 face images to avoid overwriting
                                     break
-                                
-                                crop = frame[y+bordersize:y+h-bordersize, x+bordersize:x+w-bordersize]
+
+                                # Crop out face from frame and resize it to a common size (128x128)
+                                crop = frame[y + BORDER:y + h - BORDER, x + BORDER:x + w - BORDER]
                                 cropscale = cv2.resize(crop, (128,128))
+
+                                # Compute variance of Laplacian convolution as measure of blurriness, with threshold
                                 blurry = cv2.Laplacian(cropscale, cv2.CV_64F).var() < 180
                                 if not blurry:
                                     #print("BLURRY")
                                     #cv2.imwrite("../faces_blurry/face_%03i.png" % self.face_i, cropscale)
                                 #else:
+
+                                    # If variance is above threshold, save face with current face counter in filename
                                     cv2.imwrite("../faces/face_%03i.png" % self.face_i, cropscale)
-                                    self.second = datetime.now()
-                                    self.face_i += 1
+                                    self.second = datetime.now()   # Remember time of saving to avoid saving too quickly
+                                    self.face_i += 1               # Increment face counter
                                     print("saved face %i" % (self.face_i-1))
                                 
-
+                        # Put face counter on top of the streamed frame
                         cv2.putText(frame, "%i" % (self.face_i-1), (100,100), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
+
                         ### and now we convert it back to JPEG to stream it
                         _, frame = cv2.imencode('.JPEG', frame)
 
@@ -153,7 +171,7 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
 # Open the camera and stream a low-res image (width 640, height 480 px)
 with picamera.PiCamera(resolution='640x480', framerate=24) as camera:
     camera.vflip = True  # Flips image vertically, depends on your camera mounting
-    camera.awb_mode= "auto"
+    camera.awb_mode = "auto"
     output = StreamingOutput()
     camera.start_recording(output, format='mjpeg')
     try:
