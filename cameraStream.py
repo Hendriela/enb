@@ -34,13 +34,14 @@ PAGE = """\
 
 # Initialize face detector
 det = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+save_faces=True     #Flag whether detected and unblurry faces should be saved
 
 # Initialize pose detector
 interpreter = make_interpreter('coral/movenet_single_pose_thunder_ptq_edgetpu.tflite')
 interpreter.allocate_tensors()
 
 # Set constants
-BORDER = 10  # Border size [px] of detected faces on stream
+BORDER = 8  # Border size [px] of detected faces on stream
 _NUM_KEYPOINTS = 17  # Number of detection points for pose detection
 
 # Dictionary to map key points to joints of body parts
@@ -181,37 +182,38 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                         rects = det.detectMultiScale(gray,
                                                      scaleFactor=1.1,
                                                      # How much the image should be scaled down per processing layer
-                                                     minNeighbors=8,
+                                                     minNeighbors=6,
                                                      # Detection threshold (higher -> more certain faces are detected)
-                                                     minSize=(170, 170),
+                                                     minSize=(152, 152),
                                                      # Minimum size of a detected face, depends on face-camera distance
                                                      flags=cv2.CASCADE_SCALE_IMAGE)
 
                         ### Save detected faces
                         # Only start the saving process if the last face was saved more than 3 seconds ago
-                        current_second = datetime.now()
-                        if (current_second - self.second).seconds >= 3:
+                        if save_faces:
+                            current_second = datetime.now()
+                            if (current_second - self.second).seconds >= 3:
 
-                            for (x, y, w, h) in rects:
-                                if self.face_i > 999:  # Stop at 999 face images to avoid overwriting
-                                    break
+                                for (x, y, w, h) in rects:
+                                    if self.face_i > 999:  # Stop at 999 face images to avoid overwriting
+                                        break
 
-                                # Crop out face from frame and resize it to a common size (128x128)
-                                crop = frame[y + BORDER:y + h - BORDER, x + BORDER:x + w - BORDER]
-                                cropscale = cv2.resize(crop, (128, 128))
+                                    # Crop out face from frame and resize it to a common size (128x128)
+                                    crop = frame[y + BORDER:y + h - BORDER, x + BORDER:x + w - BORDER]
+                                    cropscale = cv2.resize(crop, (128, 128))
 
-                                # Compute variance of Laplacian convolution as measure of blurriness, with threshold
-                                blurry = cv2.Laplacian(cropscale, cv2.CV_64F).var() < 180
-                                if not blurry:
-                                    # print("BLURRY")
-                                    # cv2.imwrite("../faces_blurry/face_%03i.png" % self.face_i, cropscale)
-                                    # else:
+                                    # Compute variance of Laplacian convolution as measure of blurriness, with threshold
+                                    blurry = cv2.Laplacian(cropscale, cv2.CV_64F).var() < 150
+                                    if not blurry:
+                                        # print("BLURRY")
+                                        # cv2.imwrite("../faces_blurry/face_%03i.png" % self.face_i, cropscale)
+                                        # else:
 
-                                    # If variance is above threshold, save face with current face counter in filename
-                                    cv2.imwrite("../faces/face_%03i.png" % self.face_i, cropscale)
-                                    self.second = datetime.now()  # Remember time of saving to avoid saving too quickly
-                                    self.face_i += 1  # Increment face counter
-                                    print("saved face %i" % (self.face_i - 1))
+                                        # If variance is above threshold, save face with current face counter in filename
+                                        cv2.imwrite("../faces/face_%03i.png" % self.face_i, cropscale)
+                                        self.second = datetime.now()  # Remember time of saving to avoid saving too quickly
+                                        self.face_i += 1  # Increment face counter
+                                        print("saved face %i" % (self.face_i - 1))
 
                         ##################################################
                         ### DRAW DETECTIONS ON THE FRAME BEFORE STREAMING
@@ -233,14 +235,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                         ### DRAW DOTS ON POSE KEYPOINTS
                         height, width, ch = frame.shape
 
-                        # Draw the pose onto the image using cyan dots
-                        for i in range(0, _NUM_KEYPOINTS):
-                            cv2.circle(frame,
-                                       [int(pose[i][1] * width), int(pose[i][0] * height)],
-                                       10,  # radius
-                                       (0, 255, 255),  # color in RGB
-                                       -1)  # fill the circle
-
                         # Draw the bones (lines between certain keypoints)
                         for edgepair, color in KEYPOINT_EDGE_INDS_TO_COLOR.items():
                             cv2.line(img=frame,
@@ -249,7 +243,15 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                                      pt2=(int(pose[edgepair[1]][1] * width),
                                           int(pose[edgepair[1]][0] * height)),
                                      color=color,
-                                     thickness=5)
+                                     thickness=int(np.round(BORDER*0.75)))
+
+                        # Draw the pose onto the image using cyan dots
+                        for i in range(0, _NUM_KEYPOINTS):
+                            cv2.circle(frame,
+                                       [int(pose[i][1] * width), int(pose[i][0] * height)],
+                                       BORDER,  # radius
+                                       (0, 255, 255),  # color in RGB
+                                       -1)  # fill the circle
 
                         ### and now we convert it back to JPEG to stream it
                         _, frame = cv2.imencode('.JPEG', frame)
